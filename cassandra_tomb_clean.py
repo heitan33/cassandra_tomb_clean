@@ -7,9 +7,11 @@ from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import SimpleStatement
 import commands, os, sys
+import argparse
 
 def cassandra_command_ops(cass_host_list, cassandra_command):
     for cass_host in cass_host_list:
+        cass_host = cass_host.split(':')[0]
         while True:
             os.environ['cassandra_command'] = str(cassandra_command)
             status, remote_repair = commands.getstatusoutput("ssh root@%s $cassandra_command" %(cass_host))
@@ -19,7 +21,9 @@ def cassandra_command_ops(cass_host_list, cassandra_command):
 
 def cassandra_alter_gc(cass_host_list, graphindex_sql, edgestore_sql):
     for host in cass_host_list:
-        cluster = Cluster(contact_points = [host], port = 9042)
+        ip = host.split(':')[0]
+        port = host.split(':')[1]
+        cluster = Cluster(contact_points = [ip], port = int(port))
         session = cluster.connect()
         session.execute(graphindex_sql)
         session.execute(edgestore_sql)
@@ -27,21 +31,20 @@ def cassandra_alter_gc(cass_host_list, graphindex_sql, edgestore_sql):
         cluster.shutdown()
 
 def main():
-    print(cass_host_list)
     print(filename)
     try:
-        cassandra_command = filename + " " + "repair bewg_bewg"
+        cassandra_command = filename + " " + "repair" + " " + keyspace
         cassandra_command_ops(cass_host_list, cassandra_command)
 
-        graphindex_sql = "ALTER TABLE bewg_bewg.graphindex WITH gc_grace_seconds = '0';"
-        edgestore_sql = "ALTER TABLE bewg_bewg.edgestore WITH gc_grace_seconds = '0';"
+        graphindex_sql = "ALTER TABLE" + " " + keyspace + ".graphindex WITH gc_grace_seconds = '0';"
+        edgestore_sql = "ALTER TABLE" + " " + keyspace + ".edgestore WITH gc_grace_seconds = '0';"
         cassandra_alter_gc(cass_host_list, graphindex_sql, edgestore_sql)
 
-        cassandra_command = filename + " " + "compact bewg_bewg"
+        cassandra_command = filename + " " + "compact" + " " + keyspace
         cassandra_command_ops(cass_host_list, cassandra_command)
 
-        graphindex_sql = "ALTER TABLE bewg_bewg.graphindex WITH gc_grace_seconds = '86400';"
-        edgestore_sql = "ALTER TABLE bewg_bewg.edgestore WITH gc_grace_seconds = '86400';"
+        graphindex_sql = "ALTER TABLE" + " " + keyspace + ".graphindex WITH gc_grace_seconds = '86400';"
+        edgestore_sql = "ALTER TABLE" + " " + keyspace + ".edgestore WITH gc_grace_seconds = '86400';"
         cassandra_alter_gc(cass_host_list, graphindex_sql, edgestore_sql)
 
     except Exception, e:
@@ -55,5 +58,14 @@ if __name__ == "__main__":
         print("nodetool not exist!!")
         sys.exit(2)
 
-    cass_host_list = ["20.5.2.40", "20.5.2.41", "20.5.2.42"]
+    parser = argparse.ArgumentParser(description='manual to this sceipt')
+    parser.add_argument("--keyspace", type=str, required=True)
+    parser.add_argument("--hosts", type=str, required=True)
+    args = parser.parse_args()
+    print(args.keyspace)
+    print(args.hosts)
+    
+    keyspace = args.keyspace
+    cass_host_list = args.hosts.split(',')
     main()
+
